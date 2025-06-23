@@ -48,13 +48,13 @@ invest-pilot/
 ## 🚀 Installation
 
 1.  Clone this repository:
-    ```bash
+   ```bash
     git clone https://github.com/Embedded-Nature/invest-pilot.git
     cd invest-pilot
-    ```
+   ```
 
 2.  Create a virtual environment and install dependencies using `uv`:
-    ```bash
+   ```bash
     uv venv
     source .venv/bin/activate  # On Windows: .venv\Scripts\activate
     uv pip install -e .
@@ -67,7 +67,7 @@ invest-pilot/
     export ALPACA_SECRET_KEY="your_paper_api_secret_key"
     export ALPACA_PAPER="true"  # Set to "false" for live trading
     export LOG_LEVEL="INFO"     # Optional: DEBUG, INFO, WARNING, ERROR
-    ```
+   ```
 
 ## 🎯 Usage
 
@@ -80,10 +80,12 @@ uv run src/main.py
 
 **For development and testing (with MCP Inspector):**
 ```bash
-uv run mcp dev src/main.py
+uv run mcp dev mcp_dev_adapter.py
 ```
 
 The inspector runs at `http://localhost:6274` and provides a web interface to test all tools interactively. Look for the URL with the pre-filled authentication token in the terminal output.
+
+> **Note**: We use `mcp_dev_adapter.py` which bridges our FastMCP 2 server with the official MCP development tools, giving you the best of both worlds: modern FastMCP features with the beautiful MCP inspector UI.
 
 ### Configuring with an MCP Client
 
@@ -195,11 +197,30 @@ The modular architecture provides:
 - **Testability**: Isolated components for unit testing
 - **Scalability**: Plugin-based design for future features
 
+### Development Workflow
+
+**Using the MCP Inspector for Testing:**
+```bash
+uv run mcp dev mcp_dev_adapter.py
+```
+
+This command:
+1. Starts your FastMCP 2 server through the adapter
+2. Launches the official MCP Inspector at `http://localhost:6274`
+3. Provides real-time testing of all tools with a beautiful web UI
+4. Shows authentication tokens and connection details
+
+The `mcp_dev_adapter.py` bridges FastMCP 2 with the official MCP development tools, so you get:
+- ✅ Modern FastMCP 2 features and performance
+- ✅ Official MCP Inspector's gorgeous UI
+- ✅ Real-time tool testing and debugging
+
 ### Adding New Tools
 
 1. Create tool handlers in appropriate modules under `src/brokers/alpaca/tools/`
-2. Add tool decorators in `src/main.py`
-3. Update documentation
+2. Add tool decorators in `src/main.py` 
+3. Update the corresponding tools in `mcp_dev_adapter.py`
+4. Update documentation
 
 ### Future Roadmap
 

@@ -114,22 +114,100 @@ class AlpacaClient:
         try:
             from alpaca.data.requests import StockLatestQuoteRequest
             request = StockLatestQuoteRequest(symbol_or_symbols=symbol)
-            return self.data_client.get_stock_latest_quote(request)
+            response = self.data_client.get_stock_latest_quote(request)
+            # Return the quote for the specific symbol
+            return response[symbol]
         except Exception as e:
             self.logger.error(f"Failed to get quote for {symbol}: {e}")
             raise APIError(f"Failed to get quote for {symbol}: {e}", "alpaca", e)
     
-    def get_stock_bars(self, symbol: str, timeframe, start, end):
+    def get_stock_bars(self, symbol: str, days: int = 5):
         """Get stock bars with error handling."""
         try:
             from alpaca.data.requests import StockBarsRequest
+            from alpaca.data.timeframe import TimeFrame
+            from datetime import datetime, timedelta
+            
+            # Calculate date range
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days)
+            
             request = StockBarsRequest(
                 symbol_or_symbols=symbol,
-                timeframe=timeframe,
-                start=start,
-                end=end
+                timeframe=TimeFrame.Day,
+                start=start_date,
+                end=end_date
             )
-            return self.data_client.get_stock_bars(request)
+            response = self.data_client.get_stock_bars(request)
+            # Return the bars for the specific symbol
+            return response[symbol]
         except Exception as e:
             self.logger.error(f"Failed to get bars for {symbol}: {e}")
-            raise APIError(f"Failed to get bars for {symbol}: {e}", "alpaca", e) 
+            raise APIError(f"Failed to get bars for {symbol}: {e}", "alpaca", e)
+    
+    def list_orders(self, status: str = "all", limit: int = 10):
+        """Get orders with error handling (wrapper for get_orders)."""
+        try:
+            from alpaca.trading.enums import QueryOrderStatus
+            # Convert string status to enum
+            if status.lower() == "open":
+                status_enum = QueryOrderStatus.OPEN
+            elif status.lower() == "closed":
+                status_enum = QueryOrderStatus.CLOSED
+            else:
+                status_enum = QueryOrderStatus.ALL
+            
+            return self.get_orders(status_enum, limit)
+        except Exception as e:
+            self.logger.error(f"Failed to list orders: {e}")
+            raise APIError(f"Failed to list orders: {e}", "alpaca", e)
+    
+    def submit_market_order(self, symbol: str, side: str, quantity: float):
+        """Submit market order."""
+        try:
+            from alpaca.trading.requests import MarketOrderRequest
+            from alpaca.trading.enums import OrderSide
+            
+            # Convert side string to enum
+            order_side = OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
+            
+            order_request = MarketOrderRequest(
+                symbol=symbol,
+                qty=quantity,
+                side=order_side
+            )
+            return self.submit_order(order_request)
+        except Exception as e:
+            self.logger.error(f"Failed to submit market order: {e}")
+            raise APIError(f"Failed to submit market order: {e}", "alpaca", e)
+    
+    def submit_limit_order(self, symbol: str, side: str, quantity: float, limit_price: float):
+        """Submit limit order."""
+        try:
+            from alpaca.trading.requests import LimitOrderRequest
+            from alpaca.trading.enums import OrderSide
+            
+            # Convert side string to enum
+            order_side = OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
+            
+            order_request = LimitOrderRequest(
+                symbol=symbol,
+                qty=quantity,
+                side=order_side,
+                limit_price=limit_price
+            )
+            return self.submit_order(order_request)
+        except Exception as e:
+            self.logger.error(f"Failed to submit limit order: {e}")
+            raise APIError(f"Failed to submit limit order: {e}", "alpaca", e)
+    
+    def get_position(self, symbol: str):
+        """Get position for a specific symbol."""
+        try:
+            return self.trading_client.get_open_position(symbol)
+        except Exception as e:
+            # If position doesn't exist, return None instead of raising error
+            if "position does not exist" in str(e).lower():
+                return None
+            self.logger.error(f"Failed to get position for {symbol}: {e}")
+            raise APIError(f"Failed to get position for {symbol}: {e}", "alpaca", e) 

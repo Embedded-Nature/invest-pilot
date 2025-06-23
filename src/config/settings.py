@@ -61,15 +61,21 @@ def load_alpaca_config() -> AlpacaConfig:
                   os.getenv("API_SECRET_KEY"))
     
     # Check for paper trading setting
-    paper_env = (os.getenv("ALPACA_PAPER") or 
-                 os.getenv("APCA_API_BASE_URL", "").endswith("paper-api.alpaca.markets") or
-                 "true")
+    paper_env = os.getenv("ALPACA_PAPER")
+    if paper_env is None:
+        # No explicit setting, check base URL
+        apca_base_url = os.getenv("APCA_API_BASE_URL", "")
+        if apca_base_url.endswith("paper-api.alpaca.markets"):
+            paper_env = "true"
+        else:
+            paper_env = "true"  # Default to paper trading for safety
+    
     paper = str(paper_env).lower() == "true"
     
     # Base URL with fallback logic
     base_url = (os.getenv("ALPACA_BASE_URL") or 
                 os.getenv("APCA_API_BASE_URL"))
-    
+
     if not api_key:
         raise InvalidConfigurationError(
             "API key is required. Set one of: ALPACA_API_KEY, or API_KEY_ID"

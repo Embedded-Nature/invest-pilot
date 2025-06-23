@@ -1,5 +1,6 @@
 """Order-related tools for Alpaca broker."""
 
+import json
 from mcp.types import TextContent
 from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest, ClosePositionRequest
 from alpaca.trading.enums import QueryOrderStatus, TimeInForce
@@ -30,28 +31,36 @@ async def handle_get_orders(client: AlpacaClient, arguments: Dict[str, Any]) -> 
         orders = client.get_orders(status=status, limit=limit)
         
         if not orders:
-            response = f"No {status_str} orders found."
+            result = {
+                "message": f"No {status_str} orders found.",
+                "orders": []
+            }
         else:
-            response = f"{status_str.title()} Orders:\n"
+            result = {
+                "message": f"Found {len(orders)} {status_str} orders",
+                "orders": []
+            }
+            
             for order in orders:
-                response += f"""
-- Order ID: {order.id}
-  • Symbol: {order.symbol}
-  • Side: {order.side}
-  • Quantity: {order.qty}
-  • Order Type: {order.order_type}
-  • Status: {order.status}
-  • Submitted At: {order.submitted_at}"""
-                
-                if hasattr(order, 'limit_price') and order.limit_price:
-                    response += f"\n  • Limit Price: {format_currency(float(order.limit_price))}"
-                if hasattr(order, 'filled_qty') and order.filled_qty:
-                    response += f"\n  • Filled Quantity: {order.filled_qty}"
-                if hasattr(order, 'filled_avg_price') and order.filled_avg_price:
-                    response += f"\n  • Average Fill Price: {format_currency(float(order.filled_avg_price))}"
+                order_data = {
+                    "id": str(order.id),  # Convert UUID to string
+                    "symbol": order.symbol,
+                    "qty": float(order.qty),
+                    "filled_qty": float(order.filled_qty) if order.filled_qty else 0,
+                    "side": order.side,
+                    "order_type": order.order_type,
+                    "status": order.status,
+                    "limit_price": float(order.limit_price) if order.limit_price else None,
+                    "stop_price": float(order.stop_price) if order.stop_price else None,
+                    "avg_fill_price": float(order.avg_fill_price) if order.avg_fill_price else None,
+                    "created_at": order.created_at.isoformat() if order.created_at else None,
+                    "updated_at": order.updated_at.isoformat() if order.updated_at else None,
+                    "submitted_at": order.submitted_at.isoformat() if order.submitted_at else None,
+                }
+                result["orders"].append(order_data)
         
         logger.info(f"Successfully retrieved {len(orders)} {status_str} orders")
-        return [TextContent(type="text", text=response)]
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
         
     except APIError as e:
         logger.error(f"API error getting orders: {e}")
