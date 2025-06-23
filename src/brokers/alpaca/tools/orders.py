@@ -2,13 +2,18 @@
 
 import json
 from mcp.types import TextContent
-from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest, ClosePositionRequest
-from alpaca.trading.enums import QueryOrderStatus, TimeInForce
+from alpaca.trading.requests import (
+    MarketOrderRequest, LimitOrderRequest, ClosePositionRequest, 
+    OrderRequest, TakeProfitRequest, StopLossRequest, TrailingStopOrderRequest
+)
+from alpaca.trading.enums import (
+    QueryOrderStatus, TimeInForce, OrderClass, OrderType, OrderSide
+)
 from ..client import AlpacaClient
 from ....core.logging_config import get_logger
 from ....core.utils import log_tool_execution, get_order_side, format_currency
 from ....core.exceptions import APIError
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 logger = get_logger(__name__)
 
@@ -49,10 +54,13 @@ async def handle_get_orders(client: AlpacaClient, arguments: Dict[str, Any]) -> 
                     "filled_qty": float(order.filled_qty) if order.filled_qty else 0,
                     "side": order.side,
                     "order_type": order.order_type,
+                    "order_class": order.order_class,
                     "status": order.status,
                     "limit_price": float(order.limit_price) if order.limit_price else None,
                     "stop_price": float(order.stop_price) if order.stop_price else None,
-                    "avg_fill_price": float(order.avg_fill_price) if order.avg_fill_price else None,
+                    "avg_fill_price": float(order.filled_avg_price) if order.filled_avg_price else None,
+                    "trail_price": float(order.trail_price) if order.trail_price else None,
+                    "trail_percent": float(order.trail_percent) if order.trail_percent else None,
                     "created_at": order.created_at.isoformat() if order.created_at else None,
                     "updated_at": order.updated_at.isoformat() if order.updated_at else None,
                     "submitted_at": order.submitted_at.isoformat() if order.submitted_at else None,
@@ -254,4 +262,321 @@ async def handle_take_partial_profit(client: AlpacaClient, arguments: Dict[str, 
         return [TextContent(type="text", text=f"Error taking partial profit: {e}")]
     except Exception as e:
         logger.error(f"Unexpected error taking partial profit: {e}")
+        return [TextContent(type="text", text=f"Unexpected error: {e}")]
+
+
+# =====================================================
+# ADVANCED ORDERS - New Implementation
+# =====================================================
+
+async def handle_place_bracket_order(client: AlpacaClient, arguments: Dict[str, Any]) -> List[TextContent]:
+    """Handle place_bracket_order tool execution."""
+    log_tool_execution(logger, "place_bracket_order", arguments)
+    
+    try:
+        symbol = arguments["symbol"].upper()
+        side = get_order_side(arguments["side"])
+        quantity = arguments["quantity"]
+        order_type = arguments.get("order_type", "market").lower()
+        limit_price = arguments.get("limit_price")
+        take_profit_price = arguments["take_profit_price"]
+        stop_loss_price = arguments["stop_loss_price"]
+        stop_loss_limit_price = arguments.get("stop_loss_limit_price")
+        time_in_force_str = arguments.get("time_in_force", "gtc").upper()
+        
+        # Validate required parameters
+        if order_type == "limit" and not limit_price:
+            raise ValueError("limit_price is required for limit orders")
+        
+        # Convert time_in_force
+        time_in_force = TimeInForce.GTC if time_in_force_str == "GTC" else TimeInForce.DAY
+        
+        # Convert order type
+        alpaca_order_type = OrderType.MARKET if order_type == "market" else OrderType.LIMIT
+        
+        # Create take profit and stop loss requests
+        take_profit = TakeProfitRequest(limit_price=take_profit_price)
+        
+        if stop_loss_limit_price:
+            stop_loss = StopLossRequest(stop_price=stop_loss_price, limit_price=stop_loss_limit_price)
+        else:
+            stop_loss = StopLossRequest(stop_price=stop_loss_price)
+        
+        # Create bracket order request using specific order request types
+        if order_type == "limit":
+            order_request = LimitOrderRequest(
+                symbol=symbol,
+                qty=quantity,
+                side=side,
+                limit_price=limit_price,
+                time_in_force=time_in_force,
+                order_class=OrderClass.BRACKET,
+                take_profit=take_profit,
+                stop_loss=stop_loss
+            )
+        else:
+            order_request = MarketOrderRequest(
+                symbol=symbol,
+                qty=quantity,
+                side=side,
+                time_in_force=time_in_force,
+                order_class=OrderClass.BRACKET,
+                take_profit=take_profit,
+                stop_loss=stop_loss
+            )
+        
+        order = client.submit_order(order_request)
+        
+        response = f"""Bracket order placed successfully:
+- Order ID: {order.id}
+- Symbol: {order.symbol}
+- Side: {order.side}
+- Quantity: {order.qty}
+- Order Type: {order.order_type}
+- Order Class: {order.order_class}
+- Take Profit Price: {format_currency(take_profit_price)}
+- Stop Loss Price: {format_currency(stop_loss_price)}
+- Status: {order.status}
+- Submitted At: {order.submitted_at}"""
+        
+        if limit_price:
+            response += f"\n- Entry Limit Price: {format_currency(limit_price)}"
+        if stop_loss_limit_price:
+            response += f"\n- Stop Loss Limit Price: {format_currency(stop_loss_limit_price)}"
+        
+        logger.info(f"Successfully placed bracket order: {symbol} {side} {quantity}")
+        return [TextContent(type="text", text=response)]
+        
+    except ValueError as e:
+        logger.error(f"Invalid parameters for bracket order: {e}")
+        return [TextContent(type="text", text=f"Invalid parameters: {e}")]
+    except APIError as e:
+        logger.error(f"API error placing bracket order: {e}")
+        return [TextContent(type="text", text=f"Error placing bracket order: {e}")]
+    except Exception as e:
+        logger.error(f"Unexpected error placing bracket order: {e}")
+        return [TextContent(type="text", text=f"Unexpected error: {e}")]
+
+
+async def handle_place_oco_order(client: AlpacaClient, arguments: Dict[str, Any]) -> List[TextContent]:
+    """Handle place_oco_order tool execution."""
+    log_tool_execution(logger, "place_oco_order", arguments)
+    
+    try:
+        symbol = arguments["symbol"].upper()
+        quantity = arguments["quantity"]
+        take_profit_price = arguments["take_profit_price"]
+        stop_loss_price = arguments["stop_loss_price"]
+        stop_loss_limit_price = arguments.get("stop_loss_limit_price")
+        time_in_force_str = arguments.get("time_in_force", "gtc").upper()
+        
+        # Convert time_in_force
+        time_in_force = TimeInForce.GTC if time_in_force_str == "GTC" else TimeInForce.DAY
+        
+        # Create take profit and stop loss requests
+        take_profit = TakeProfitRequest(limit_price=take_profit_price)
+        
+        if stop_loss_limit_price:
+            stop_loss = StopLossRequest(stop_price=stop_loss_price, limit_price=stop_loss_limit_price)
+        else:
+            stop_loss = StopLossRequest(stop_price=stop_loss_price)
+        
+        # OCO orders are always sell orders for existing positions using limit order
+        order_request = LimitOrderRequest(
+            symbol=symbol,
+            qty=quantity,
+            side=OrderSide.SELL,
+            limit_price=take_profit_price,  # Use take profit as the limit price
+            time_in_force=time_in_force,
+            order_class=OrderClass.OCO,
+            take_profit=take_profit,
+            stop_loss=stop_loss
+        )
+        
+        order = client.submit_order(order_request)
+        
+        response = f"""OCO order placed successfully:
+- Order ID: {order.id}
+- Symbol: {order.symbol}
+- Side: {order.side}
+- Quantity: {order.qty}
+- Order Class: {order.order_class}
+- Take Profit Price: {format_currency(take_profit_price)}
+- Stop Loss Price: {format_currency(stop_loss_price)}
+- Status: {order.status}
+- Submitted At: {order.submitted_at}"""
+        
+        if stop_loss_limit_price:
+            response += f"\n- Stop Loss Limit Price: {format_currency(stop_loss_limit_price)}"
+        
+        logger.info(f"Successfully placed OCO order: {symbol} sell {quantity}")
+        return [TextContent(type="text", text=response)]
+        
+    except APIError as e:
+        logger.error(f"API error placing OCO order: {e}")
+        return [TextContent(type="text", text=f"Error placing OCO order: {e}")]
+    except Exception as e:
+        logger.error(f"Unexpected error placing OCO order: {e}")
+        return [TextContent(type="text", text=f"Unexpected error: {e}")]
+
+
+async def handle_place_oto_order(client: AlpacaClient, arguments: Dict[str, Any]) -> List[TextContent]:
+    """Handle place_oto_order tool execution."""
+    log_tool_execution(logger, "place_oto_order", arguments)
+    
+    try:
+        symbol = arguments["symbol"].upper()
+        side = get_order_side(arguments["side"])
+        quantity = arguments["quantity"]
+        order_type = arguments.get("order_type", "market").lower()
+        limit_price = arguments.get("limit_price")
+        take_profit_price = arguments.get("take_profit_price")
+        stop_loss_price = arguments.get("stop_loss_price")
+        stop_loss_limit_price = arguments.get("stop_loss_limit_price")
+        time_in_force_str = arguments.get("time_in_force", "gtc").upper()
+        
+        # Validate that exactly one of take_profit_price or stop_loss_price is provided
+        if not ((take_profit_price is None) ^ (stop_loss_price is None)):
+            raise ValueError("Must provide exactly one of take_profit_price or stop_loss_price for OTO orders")
+        
+        # Validate required parameters
+        if order_type == "limit" and not limit_price:
+            raise ValueError("limit_price is required for limit orders")
+        
+        # Convert time_in_force and order type
+        time_in_force = TimeInForce.GTC if time_in_force_str == "GTC" else TimeInForce.DAY
+        alpaca_order_type = OrderType.MARKET if order_type == "market" else OrderType.LIMIT
+        
+        # Create the exit order (either take profit or stop loss)
+        exit_order = None
+        exit_description = ""
+        
+        if take_profit_price:
+            exit_order = TakeProfitRequest(limit_price=take_profit_price)
+            exit_description = f"Take Profit Price: {format_currency(take_profit_price)}"
+        else:
+            if stop_loss_limit_price:
+                exit_order = StopLossRequest(stop_price=stop_loss_price, limit_price=stop_loss_limit_price)
+                exit_description = f"Stop Loss Price: {format_currency(stop_loss_price)}, Limit: {format_currency(stop_loss_limit_price)}"
+            else:
+                exit_order = StopLossRequest(stop_price=stop_loss_price)
+                exit_description = f"Stop Loss Price: {format_currency(stop_loss_price)}"
+        
+        # Create OTO order request using specific order request types
+        common_kwargs = {
+            "symbol": symbol,
+            "qty": quantity,
+            "side": side,
+            "time_in_force": time_in_force,
+            "order_class": OrderClass.OTO
+        }
+        
+        # Add the appropriate exit order
+        if take_profit_price:
+            common_kwargs["take_profit"] = exit_order
+        else:
+            common_kwargs["stop_loss"] = exit_order
+        
+        # Create order request based on type
+        if order_type == "limit":
+            order_request = LimitOrderRequest(
+                limit_price=limit_price,
+                **common_kwargs
+            )
+        else:
+            order_request = MarketOrderRequest(**common_kwargs)
+        
+        order = client.submit_order(order_request)
+        
+        response = f"""OTO order placed successfully:
+- Order ID: {order.id}
+- Symbol: {order.symbol}
+- Side: {order.side}
+- Quantity: {order.qty}
+- Order Type: {order.order_type}
+- Order Class: {order.order_class}
+- {exit_description}
+- Status: {order.status}
+- Submitted At: {order.submitted_at}"""
+        
+        if limit_price:
+            response += f"\n- Entry Limit Price: {format_currency(limit_price)}"
+        
+        logger.info(f"Successfully placed OTO order: {symbol} {side} {quantity}")
+        return [TextContent(type="text", text=response)]
+        
+    except ValueError as e:
+        logger.error(f"Invalid parameters for OTO order: {e}")
+        return [TextContent(type="text", text=f"Invalid parameters: {e}")]
+    except APIError as e:
+        logger.error(f"API error placing OTO order: {e}")
+        return [TextContent(type="text", text=f"Error placing OTO order: {e}")]
+    except Exception as e:
+        logger.error(f"Unexpected error placing OTO order: {e}")
+        return [TextContent(type="text", text=f"Unexpected error: {e}")]
+
+
+async def handle_place_trailing_stop_order(client: AlpacaClient, arguments: Dict[str, Any]) -> List[TextContent]:
+    """Handle place_trailing_stop_order tool execution."""
+    log_tool_execution(logger, "place_trailing_stop_order", arguments)
+    
+    try:
+        symbol = arguments["symbol"].upper()
+        side = get_order_side(arguments["side"])
+        quantity = arguments["quantity"]
+        trail_type = arguments["trail_type"].lower()
+        trail_amount = arguments["trail_amount"]
+        time_in_force_str = arguments.get("time_in_force", "day").upper()
+        
+        # Validate trail_type
+        if trail_type not in ["price", "percent"]:
+            raise ValueError("trail_type must be 'price' or 'percent'")
+        
+        # Convert time_in_force
+        time_in_force = TimeInForce.GTC if time_in_force_str == "GTC" else TimeInForce.DAY
+        
+        # Create trailing stop order request
+        if trail_type == "price":
+            order_request = TrailingStopOrderRequest(
+                symbol=symbol,
+                qty=quantity,
+                side=side,
+                time_in_force=time_in_force,
+                trail_price=trail_amount
+            )
+            trail_description = f"Trail Amount: ${trail_amount}"
+        else:  # percent
+            order_request = TrailingStopOrderRequest(
+                symbol=symbol,
+                qty=quantity,
+                side=side,
+                time_in_force=time_in_force,
+                trail_percent=trail_amount
+            )
+            trail_description = f"Trail Percentage: {trail_amount * 100:.2f}%"
+        
+        order = client.submit_order(order_request)
+        
+        response = f"""Trailing stop order placed successfully:
+- Order ID: {order.id}
+- Symbol: {order.symbol}
+- Side: {order.side}
+- Quantity: {order.qty}
+- Order Type: {order.order_type}
+- {trail_description}
+- Time in Force: {time_in_force}
+- Status: {order.status}
+- Submitted At: {order.submitted_at}"""
+        
+        logger.info(f"Successfully placed trailing stop order: {symbol} {side} {quantity}")
+        return [TextContent(type="text", text=response)]
+        
+    except ValueError as e:
+        logger.error(f"Invalid parameters for trailing stop order: {e}")
+        return [TextContent(type="text", text=f"Invalid parameters: {e}")]
+    except APIError as e:
+        logger.error(f"API error placing trailing stop order: {e}")
+        return [TextContent(type="text", text=f"Error placing trailing stop order: {e}")]
+    except Exception as e:
+        logger.error(f"Unexpected error placing trailing stop order: {e}")
         return [TextContent(type="text", text=f"Unexpected error: {e}")] 

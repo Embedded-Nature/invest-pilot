@@ -27,7 +27,10 @@ from src.brokers.alpaca.tools.account import handle_get_account_info, handle_get
 from src.brokers.alpaca.tools.market_data import handle_get_stock_quote, handle_get_stock_bars, handle_ping
 from src.brokers.alpaca.tools.orders import (
     handle_get_orders, handle_place_market_order, handle_place_limit_order,
-    handle_cancel_all_orders, handle_close_all_positions, handle_take_partial_profit
+    handle_cancel_all_orders, handle_close_all_positions, handle_take_partial_profit,
+    # Advanced orders
+    handle_place_bracket_order, handle_place_oco_order, handle_place_oto_order,
+    handle_place_trailing_stop_order
 )
 
 # Initialize FastMCP server
@@ -262,6 +265,160 @@ async def take_partial_profit(symbol: str, profit_threshold: float = 0.2, close_
         raise
 
 # ==============================================================================
+# Advanced Order Tools
+# ==============================================================================
+
+@mcp.tool()
+async def place_bracket_order(
+    symbol: str, 
+    side: str, 
+    quantity: float, 
+    take_profit_price: float,
+    stop_loss_price: float,
+    order_type: str = "market",
+    limit_price: float = None,
+    stop_loss_limit_price: float = None,
+    time_in_force: str = "gtc",
+    *, ctx: Context
+) -> str:
+    """
+    Place a bracket order (entry + take profit + stop loss).
+    
+    Args:
+        symbol: Stock ticker symbol (e.g., AAPL, MSFT)
+        side: Order side (buy or sell)
+        quantity: Number of shares to buy or sell
+        take_profit_price: Price to take profits
+        stop_loss_price: Price to trigger stop loss
+        order_type: Order type for entry order (market or limit, default: market)
+        limit_price: Entry price (required if order_type is limit)
+        stop_loss_limit_price: Limit price for stop loss (makes it stop-limit order)
+        time_in_force: Time in force (day or gtc, default: gtc)
+    """
+    await ctx.info(f"Placing bracket order for {quantity} shares of {symbol}...")
+    try:
+        client = get_alpaca_client()
+        result = await handle_place_bracket_order(client, {
+            "symbol": symbol, "side": side, "quantity": quantity,
+            "order_type": order_type, "limit_price": limit_price,
+            "take_profit_price": take_profit_price, "stop_loss_price": stop_loss_price,
+            "stop_loss_limit_price": stop_loss_limit_price, "time_in_force": time_in_force
+        })
+        return result[0].text
+    except Exception as e:
+        await ctx.error(f"Failed to place bracket order: {e}")
+        raise
+
+@mcp.tool()
+async def place_oco_order(
+    symbol: str,
+    quantity: float,
+    take_profit_price: float,
+    stop_loss_price: float,
+    stop_loss_limit_price: float = None,
+    time_in_force: str = "gtc",
+    *, ctx: Context
+) -> str:
+    """
+    Place an OCO (One-Cancels-Other) order for existing positions.
+    
+    Args:
+        symbol: Stock ticker symbol (e.g., AAPL, MSFT)
+        quantity: Number of shares to sell
+        take_profit_price: Limit price for profit taking
+        stop_loss_price: Stop price for loss protection
+        stop_loss_limit_price: Limit price for stop loss (makes it stop-limit order)
+        time_in_force: Time in force (day or gtc, default: gtc)
+    """
+    await ctx.info(f"Placing OCO order for {quantity} shares of {symbol}...")
+    try:
+        client = get_alpaca_client()
+        result = await handle_place_oco_order(client, {
+            "symbol": symbol, "quantity": quantity,
+            "take_profit_price": take_profit_price, "stop_loss_price": stop_loss_price,
+            "stop_loss_limit_price": stop_loss_limit_price, "time_in_force": time_in_force
+        })
+        return result[0].text
+    except Exception as e:
+        await ctx.error(f"Failed to place OCO order: {e}")
+        raise
+
+@mcp.tool()
+async def place_oto_order(
+    symbol: str,
+    side: str,
+    quantity: float,
+    order_type: str = "market",
+    limit_price: float = None,
+    take_profit_price: float = None,
+    stop_loss_price: float = None,
+    stop_loss_limit_price: float = None,
+    time_in_force: str = "gtc",
+    *, ctx: Context
+) -> str:
+    """
+    Place an OTO (One-Triggers-Other) order with single exit condition.
+    
+    Args:
+        symbol: Stock ticker symbol (e.g., AAPL, MSFT)
+        side: Order side (buy or sell)
+        quantity: Number of shares to buy or sell
+        order_type: Order type for entry order (market or limit, default: market)
+        limit_price: Entry price (required if order_type is limit)
+        take_profit_price: Price to take profits (provide this OR stop_loss_price)
+        stop_loss_price: Price to trigger stop loss (provide this OR take_profit_price)
+        stop_loss_limit_price: Limit price for stop loss (makes it stop-limit order)
+        time_in_force: Time in force (day or gtc, default: gtc)
+    """
+    await ctx.info(f"Placing OTO order for {quantity} shares of {symbol}...")
+    try:
+        client = get_alpaca_client()
+        result = await handle_place_oto_order(client, {
+            "symbol": symbol, "side": side, "quantity": quantity,
+            "order_type": order_type, "limit_price": limit_price,
+            "take_profit_price": take_profit_price, "stop_loss_price": stop_loss_price,
+            "stop_loss_limit_price": stop_loss_limit_price, "time_in_force": time_in_force
+        })
+        return result[0].text
+    except Exception as e:
+        await ctx.error(f"Failed to place OTO order: {e}")
+        raise
+
+@mcp.tool()
+async def place_trailing_stop_order(
+    symbol: str,
+    side: str,
+    quantity: float,
+    trail_type: str,
+    trail_amount: float,
+    time_in_force: str = "day",
+    *, ctx: Context
+) -> str:
+    """
+    Place a trailing stop order.
+    
+    Args:
+        symbol: Stock ticker symbol (e.g., AAPL, MSFT)
+        side: Order side (buy or sell)
+        quantity: Number of shares to buy or sell
+        trail_type: Trail type (price or percent)
+        trail_amount: Trail distance (dollar amount for price, decimal for percent e.g. 0.05 = 5%)
+        time_in_force: Time in force (day or gtc, default: day)
+    """
+    await ctx.info(f"Placing trailing stop order for {quantity} shares of {symbol}...")
+    try:
+        client = get_alpaca_client()
+        result = await handle_place_trailing_stop_order(client, {
+            "symbol": symbol, "side": side, "quantity": quantity,
+            "trail_type": trail_type, "trail_amount": trail_amount,
+            "time_in_force": time_in_force
+        })
+        return result[0].text
+    except Exception as e:
+        await ctx.error(f"Failed to place trailing stop order: {e}")
+        raise
+
+# ==============================================================================
 # Server Startup
 # ==============================================================================
 
@@ -276,7 +433,9 @@ if __name__ == "__main__":
         tools = [
             "ping", "get_account_info", "get_positions", "get_stock_quote", "get_stock_bars",
             "get_orders", "place_market_order", "place_limit_order", "cancel_all_orders",
-            "close_all_positions", "take_partial_profit"
+            "close_all_positions", "take_partial_profit",
+            # Advanced orders
+            "place_bracket_order", "place_oco_order", "place_oto_order", "place_trailing_stop_order"
         ]
         _logger.info(f"Loaded {len(tools)} tools: {tools}")
         _logger.info("MCP Server is ready and waiting for connections...")
