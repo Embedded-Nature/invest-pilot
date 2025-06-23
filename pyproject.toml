@@ -1,0 +1,23 @@
+[project]
+name = "alpaca-mcp-server"
+version = "0.1.0"
+description = "FastMCP server implementation for Alpaca Trading API"
+authors = [
+    { name = "embeddednature", email = "isaac@embeddednature.com" },
+]
+requires-python = ">=3.10"
+dependencies = [
+    "mcp[cli]>=1.2.0",
+    "alpaca-py",
+    "python-dotenv",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["alpaca_mcp_server"] 
