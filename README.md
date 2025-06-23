@@ -1,128 +1,222 @@
-# Alpaca MCP Server
+# Invest-Pilot MCP Server
 
-Model Context Protocol (MCP) server for trading stocks, checking positions, fetching market data, and managing your account with Alpaca.
+Model Context Protocol (MCP) server for trading stocks, checking positions, fetching market data, and managing your account with Alpaca. Built with a **modular architecture** for extensibility and maintainability.
 
-## Features
+## ✨ Features
 
-- 📊 **Market Data** - Get real-time stock quotes and historical price data.
-- 💵 **Account Information** - Check your balances, buying power, and status.
-- 📈 **Position Management** - View current positions and their performance.
-- 🛒 **Order Placement** - Place market and limit orders through natural language.
-- 📋 **Order Management** - List, track, and cancel orders.
-- 💸 **Automated Profit-Taking** - Take partial profits when positions reach a certain threshold.
+- 📊 **Market Data** - Get real-time stock quotes and historical price data
+- 💵 **Account Information** - Check your balances, buying power, and status
+- 📈 **Position Management** - View current positions and their performance
+- 🛒 **Order Placement** - Place market and limit orders through natural language
+- 📋 **Order Management** - List, track, and cancel orders
+- 💸 **Automated Profit-Taking** - Take partial profits when positions reach a certain threshold
+- 🏗️ **Modular Architecture** - Clean, extensible codebase ready for multi-broker support
+- 🔧 **Comprehensive Error Handling** - Robust API error handling and logging
+- 🧪 **Development Tools** - Built-in MCP Inspector support for testing
 
-## Prerequisites
+## 🏗️ Architecture
+
+The server features a **modular architecture** designed for scalability:
+
+```
+invest-pilot/
+├── src/
+│   ├── main.py                    # New modular entry point
+│   ├── core/                      # Shared utilities
+│   │   ├── exceptions.py          # Custom exception classes
+│   │   ├── logging_config.py      # Centralized logging
+│   │   └── utils.py               # Shared utility functions
+│   ├── brokers/alpaca/            # Alpaca-specific implementation
+│   │   ├── client.py              # API client wrapper
+│   │   └── tools/                 # Organized tool modules
+│   │       ├── account.py         # Account-related tools
+│   │       ├── orders.py          # Order management tools
+│   │       └── market_data.py     # Market data tools
+│   └── config/                    # Configuration management
+│       └── settings.py            # Environment-based settings
+├── alpaca_mcp_server.py          # Legacy entry point (backward compatible)
+└── tests/                        # Test framework (ready for expansion)
+```
+
+## 📋 Prerequisites
 
 - Python 3.10+
 - [uv](https://github.com/astral-sh/uv) (for environment and package management)
 - Alpaca API keys
 - An MCP client (e.g., Claude for Desktop)
 
-## Installation
+## 🚀 Installation
 
 1.  Clone this repository:
     ```bash
-    git clone https://github.com/embeddednature/alpaca-mcp-server.git
-    cd alpaca-mcp-server
+    git clone https://github.com/Embedded-Nature/invest-pilot.git
+    cd invest-pilot
     ```
 
 2.  Create a virtual environment and install dependencies using `uv`:
     ```bash
     uv venv
-    source .venv/bin/activate
+    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
     uv pip install -e .
     ```
 
-3.  Create a `.env` file in the root directory and add your Alpaca API credentials:
+3.  Set up your environment variables:
+    ```bash
+    # Create .env file or set environment variables directly
+    export ALPACA_API_KEY="your_paper_api_key_id"
+    export ALPACA_SECRET_KEY="your_paper_api_secret_key"
+    export ALPACA_PAPER="true"  # Set to "false" for live trading
+    export LOG_LEVEL="INFO"     # Optional: DEBUG, INFO, WARNING, ERROR
     ```
-    API_KEY_ID="your_paper_api_key_id"
-    API_SECRET_KEY="your_paper_api_secret_key"
-    ```
 
-## Usage
+## 🎯 Usage
 
-### Running the server
+### Running the Server
 
-Start the server from your terminal:
-
+**For production use (direct server):**
 ```bash
-uv run alpaca_mcp_server.py
+uv run src/main.py
 ```
 
-The server will start and listen for connections from your MCP client.
-
-### Development and Inspection
-
-To run the server in development mode with the MCP Inspector, which allows you to view available tools and their schemas interactively, use the `dev` command:
-
+**For development and testing (with MCP Inspector):**
 ```bash
-uv run mcp dev alpaca_mcp_server.py
+uv run mcp dev src/main.py
 ```
 
-This will start the server and provide a URL to access the web-based inspector.
+The inspector runs at `http://localhost:6274` and provides a web interface to test all tools interactively. Look for the URL with the pre-filled authentication token in the terminal output.
 
 ### Configuring with an MCP Client
 
-To connect the server to a client like Claude for Desktop, you need to tell the client how to run the server.
+To connect the server to a client like Claude for Desktop:
 
-1.  Open your MCP client's configuration.
-2.  Add a new server configuration. The command should execute `uv` in the repository's directory to run the server script.
-
-Here is an example for `claude_desktop_config.json`:
-
+**Example `claude_desktop_config.json`:**
 ```json
 {
   "mcpServers": {
-    "alpaca": {
+    "invest-pilot": {
       "command": "/path/to/your/uv/executable",
       "args": [
         "run",
-        "alpaca_mcp_server.py"
+        "src/main.py"
       ],
-      "cwd": "/path/to/your/alpaca-mcp-server"
+      "cwd": "/path/to/your/invest-pilot",
+      "env": {
+        "ALPACA_API_KEY": "your_paper_api_key_id",
+        "ALPACA_SECRET_KEY": "your_paper_api_secret_key",
+        "ALPACA_PAPER": "true"
+      }
     }
   }
 }
 ```
 
-**Note**:
-- Make sure to replace the paths for `command` and `cwd` with the correct absolute paths on your system.
-- The server loads API keys from the `.env` file, so you don't need to add them to the client configuration.
+**Note**: Replace paths with absolute paths on your system. You can set environment variables either in the config or in a `.env` file.
 
-## Available Tools
+## 🛠️ Available Tools
 
-The server exposes the following tools for use with your MCP client:
+The server exposes **11 tools** organized by functionality:
 
-- `ping()` - Test if the server is responsive.
-- `get_account_info()` - Get account balances and status.
-- `get_positions()` - List all current positions in the portfolio.
-- `get_stock_quote(symbol)` - Get the latest quote for a stock.
-- `get_stock_bars(symbol, days)` - Get historical price bars for a stock.
-- `get_orders(status, limit)` - List orders with a specified status.
-- `place_market_order(symbol, side, quantity)` - Place a market order.
-- `place_limit_order(symbol, side, quantity, limit_price)` - Place a limit order.
-- `cancel_all_orders()` - Cancel all open orders.
-- `close_all_positions(cancel_orders)` - Close all open positions.
-- `take_partial_profit(symbol, profit_threshold, close_percentage)` - Sell a percentage of a position if profit exceeds a threshold.
+### 🏥 Health & Status
+- `ping()` - Test if the server is responsive
 
-## Example Queries
+### 💰 Account Management
+- `get_account_info()` - Get account balances and status
+- `get_positions()` - List all current positions in the portfolio
 
-Once the server is connected, you can use natural language to manage your trading account:
+### 📊 Market Data
+- `get_stock_quote(symbol)` - Get the latest quote for a stock
+- `get_stock_bars(symbol, days=5)` - Get historical price bars for a stock
 
+### 📋 Order Management
+- `get_orders(status="all", limit=10)` - List orders with specified status
+- `place_market_order(symbol, side, quantity)` - Place a market order
+- `place_limit_order(symbol, side, quantity, limit_price)` - Place a limit order
+- `cancel_all_orders()` - Cancel all open orders
+- `close_all_positions(cancel_orders=True)` - Close all open positions
+
+### 💸 Advanced Features
+- `take_partial_profit(symbol, profit_threshold=0.2, close_percentage=0.5)` - Automated profit-taking
+
+## 💬 Example Queries
+
+Once connected, you can use natural language to manage your trading account:
+
+**Basic Operations:**
 - "Can you ping the Alpaca server?"
 - "What's my current account balance and buying power?"
 - "Show me my current positions."
+
+**Market Data:**
 - "Get the latest quote for AAPL."
 - "Show me the price history for TSLA over the last 10 days."
+
+**Trading:**
 - "Buy 5 shares of MSFT at market price."
 - "Sell 10 shares of AMZN with a limit price of $130."
-- "If my NVDA position is up by more than 25%, sell half of it."
 - "Cancel all my open orders."
 
-## Security Notice
+**Advanced:**
+- "If my NVDA position is up by more than 25%, sell half of it."
+- "Take partial profit on my AAPL shares if they're up 20% or more."
 
-This MCP server has access to your Alpaca trading account and can execute real trades. By default, it runs in paper trading mode. If you switch to live trading, be sure to review every suggested action from your AI assistant before you approve it. The authors are not responsible for any financial losses.
+## 🔧 Configuration
 
-## License
+### Environment Variables
 
-This project is licensed under the MIT License.
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ALPACA_API_KEY` | Your Alpaca API key | **Required** |
+| `ALPACA_SECRET_KEY` | Your Alpaca secret key | **Required** |
+| `ALPACA_PAPER` | Use paper trading (true/false) | `true` |
+| `ALPACA_BASE_URL` | Custom Alpaca base URL | Auto-detected |
+| `LOG_LEVEL` | Logging level | `INFO` |
+
+### Logging
+
+The server includes comprehensive logging:
+- **INFO**: General operations and successful actions
+- **WARNING**: Non-critical issues
+- **ERROR**: API errors and failures
+- **DEBUG**: Detailed execution information
+
+## 🔒 Security Notice
+
+This MCP server has access to your Alpaca trading account and can execute real trades. By default, it runs in **paper trading mode**. 
+
+**⚠️ Important**: If you switch to live trading (`ALPACA_PAPER=false`), carefully review every suggested action from your AI assistant before approval. The authors are not responsible for any financial losses.
+
+## 🧪 Development
+
+### Architecture Benefits
+
+The modular architecture provides:
+- **Extensibility**: Easy to add new brokers or tools
+- **Maintainability**: Clear separation of concerns
+- **Testability**: Isolated components for unit testing
+- **Scalability**: Plugin-based design for future features
+
+### Adding New Tools
+
+1. Create tool handlers in appropriate modules under `src/brokers/alpaca/tools/`
+2. Add tool decorators in `src/main.py`
+3. Update documentation
+
+### Future Roadmap
+
+- **Multi-broker support** (Interactive Brokers, TD Ameritrade, etc.)
+- **Advanced order types** (stop-loss, trailing stops, brackets)
+- **Portfolio analytics** and risk management
+- **Market intelligence** and screening tools
+- **Comprehensive testing suite**
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+
+---
+
+**Built with ❤️ for the trading community**
