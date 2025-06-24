@@ -230,14 +230,18 @@ The `mcp_dev_adapter.py` bridges FastMCP 2 with the official MCP development too
 - **Market intelligence** and screening tools
 - **Comprehensive testing suite**
 
-## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🤝 Contributing
+###  📄 License
+This project is licensed under the Apache License 2.0.
+© 2025 Embedded Nature LLC. All rights reserved.
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+See the [LICENSE](LICENSE) file for full terms.
+For commercial use, redistribution, or proprietary integration, please contact: isaac@embeddednature.com.
 
----
+### 🤝 Contributing
+Contributions are welcome — feel free to open a Pull Request.
+For major changes, please start with an issue to discuss scope and direction.
 
-**Built with ❤️ for the trading community**
+**Built with intent, for the agentic systems era.**
+
